@@ -1,22 +1,37 @@
 # hackdaw
 
-A tiny, hackable DAW that lives in the browser and renders on your machine.
+A tiny, **AI-native** DAW: you edit in the browser, your AI edits the same
+project as text.
 
 ![the editor with a real project — the Shape of AI parody this tool was born making](docs/screenshot.png)
 
-The browser is the UI, Python + ffmpeg are the render farm, and one JSON file
-is the whole project. Everything is non-destructive: your media is never
-modified, only `timeline.json` changes. Born making a full song parody
-(vocals, mix, and music video) — now a general-purpose music **and** video
-editor in ~4 small files you can actually read.
+## The idea
 
-## Why
+Editing in a normal DAW is a thousand tiny clicks — and your AI can't help,
+because it can't see what's on the timeline. hackdaw flips that: **the whole
+project is one readable JSON file.** An AI agent (Claude Code, Codex, …)
+reads `timeline.json` and knows *exactly* what's happening — every clip,
+start time, trim, gain, mute. So you collaborate on the same timeline from
+two seats:
 
-- **No project lock-in.** A project is a folder of media plus one readable
-  `timeline.json`. Version it, diff it, generate it from a script.
+- **You**, in the browser: drag, trim, split, listen — the taste calls.
+- **The AI**, in the file: "move the second chorus 2 s later, drop the
+  ad-libs −3 dB, mute the reference tracks, render" — done, no clicking.
+
+Save in the browser → ask the AI → reload. One timeline, two editors.
+That's the whole reason this exists: it was born making a full song parody
+(vocals, mix, music video) exactly this way — human in the editor, AI on the
+JSON and the render scripts.
+
+## Design
+
+- **One JSON file is the whole project.** Version it, diff it, generate it,
+  let an agent rewrite it. No binary project format, no lock-in.
+- **Non-destructive.** Media files are never touched; only `timeline.json`
+  changes.
 - **Hackable mixing.** The mix chain is ~80 lines of
   [pedalboard](https://github.com/spotify/pedalboard) Python. Don't like it?
-  Copy it, change it (see `examples/`).
+  Copy it, change it — or have the AI write you a new one (see `examples/`).
 - **Preview = render.** The editor's monitor and the ffmpeg compositor share
   the same layering rules, so what you see is what renders.
 
@@ -80,7 +95,10 @@ Drag / trim / split (`S`) / delete · multi-select (box or ⇧click) · group mo
 gain sliders · track add/delete/reorder · zoom · drag-drop or 📂 import
 (audio + mp4/mov/webm/png/jpg/gif). Stills default to 5 s — trim to taste.
 
-## timeline.json
+## timeline.json — the AI's interface
+
+This file is the entire project state. Point your agent at it and it can
+answer "what's on the timeline?" and make any edit the browser can:
 
 ```json
 {
