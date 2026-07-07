@@ -2,6 +2,8 @@
 
 A tiny, hackable DAW that lives in the browser and renders on your machine.
 
+![the editor with a real project — the Shape of AI parody this tool was born making](docs/screenshot.png)
+
 The browser is the UI, Python + ffmpeg are the render farm, and one JSON file
 is the whole project. Everything is non-destructive: your media is never
 modified, only `timeline.json` changes. Born making a full song parody
