@@ -1,0 +1,678 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Shape of AI — Editor</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: -apple-system, sans-serif; background: #0d0d0f; color: #ddd;
+         overflow: hidden; }
+  #bar { display: flex; gap: .6rem; align-items: center; padding: .5rem .8rem;
+         background: #17171a; border-bottom: 1px solid #26262b; }
+  button { font-size: .9rem; padding: .4rem .9rem; border-radius: 7px; border: 1px solid #333;
+           background: #222; color: #eee; cursor: pointer; }
+  button:hover { background: #2d2d32; }
+  #time { font-variant-numeric: tabular-nums; color: #8ab4ff; min-width: 78px; font-size: 1.05rem; }
+  #status { color: #777; font-size: .8rem; margin-left: auto; }
+  #view { display: flex; height: calc(100vh - 84px); }
+  #names { width: 120px; flex: none; background: #131316; border-right: 1px solid #26262b;
+           padding-top: 26px; overflow: hidden; position: relative; }
+  #namesinner { position: relative; }
+  .tname { height: 64px; border-bottom: 1px solid #1d1d21; font-size: .72rem; color: #aaa;
+           padding: 5px 6px 0; display: flex; flex-direction: column; gap: 3px; }
+  .tname .path { font-size: .56rem; color: #556; line-height: 1.25; word-break: break-all; }
+  .tname button { font-size: .62rem; padding: 1px 6px; border-radius: 4px; width: 26px; }
+  .tname button.on { background: #a53b3b; border-color: #c55; }
+  .tname.active { background: #1d2634; border-left: 3px solid #8ab4ff; }
+  .lane.active { background: #10141c; }
+  #addtrack { margin: 6px; width: calc(100% - 12px); font-size: .7rem; }
+  #scroll { overflow: auto; flex: 1; position: relative; }
+  #inner { position: relative; }
+  #ruler { height: 26px; position: sticky; top: 0; background: #131316; z-index: 6; cursor: pointer; }
+  .tick { position: absolute; top: 0; height: 26px; border-left: 1px solid #2a2a2e;
+          font-size: .62rem; color: #666; padding-left: 3px; }
+  #lanes { position: relative; }
+  .lane { height: 64px; border-bottom: 1px solid #1d1d21; }
+  .clip { position: absolute; height: 56px; border-radius: 5px; overflow: hidden;
+          cursor: grab; opacity: .95; z-index: 3; }
+  .clip.grabbed { cursor: grabbing; outline: 1px solid #fffa; z-index: 4; opacity: 1; }
+  .clip .lbl { position: absolute; top: 1px; left: 4px; font-size: .58rem; color: #fffc;
+               text-shadow: 0 0 3px #000; pointer-events: none; white-space: nowrap; }
+  .clip canvas { display: block; width: 100%; height: 100%; }
+  .clip.sel { outline: 2px solid #8ab4ff; box-shadow: 0 0 10px #8ab4ff88; filter: brightness(1.25); }
+  .handle { position: absolute; top: 0; bottom: 0; width: 7px; cursor: ew-resize; z-index: 5; }
+  .handle.l { left: 0; } .handle.r { right: 0; }
+  #playhead { position: absolute; top: 0; bottom: 0; width: 1px; background: #ff4d4d; z-index: 5;
+              pointer-events: none; }
+  #marquee { position: absolute; border: 1px solid #8ab4ff; background: #8ab4ff22; z-index: 6;
+             display: none; pointer-events: none; }
+  #hint { padding: .35rem .8rem; color: #666; font-size: .74rem; background: #101013; }
+  #monitor { position: fixed; right: 12px; top: 48px; width: 320px; height: 180px; z-index: 20;
+             background: #000; border: 1px solid #333; border-radius: 8px; overflow: hidden;
+             box-shadow: 0 4px 18px #000c; display: none; }
+  #monitor video, #monitor img { width: 100%; height: 100%; object-fit: contain; display: none; }
+  #monhead { position: absolute; top: 0; left: 0; right: 0; font-size: .6rem; color: #888;
+             background: #000a; padding: 2px 6px; z-index: 2; cursor: grab; }
+</style>
+</head>
+<body>
+<div id="bar">
+  <button id="tostart">⏮</button>
+  <button id="play">▶</button>
+  <span id="time">0:00.0</span>
+  <button id="undo" title="⌘Z">↩︎</button><button id="redo" title="⌘⇧Z">↪︎</button>
+  <button id="zout">−</button><button id="zin">＋</button>
+  <button id="addtrk">＋ track</button>
+  <button id="import">📂 import</button>
+  <input type="file" id="filein" multiple accept=".wav,.aif,.aiff,.mp3,.m4a,.mp4,.mov,.webm,.png,.jpg,.jpeg,.gif" style="display:none">
+  <button id="save">💾 save</button>
+  <button id="reload">↻</button>
+  <span id="status">loading…</span>
+</div>
+<div id="view">
+  <div id="names"><div id="namesinner"></div></div>
+  <div id="scroll"><div id="inner">
+    <div id="ruler"></div>
+    <div id="lanes"></div>
+    <div id="playhead"></div>
+    <div id="marquee"></div>
+  </div></div>
+</div>
+<div id="monitor"><div id="monhead">monitor</div><video id="monvid" muted playsinline></video><img id="monimg"></div>
+<div id="hint">click/⇧click/drag-box = select · drag = move group · EDGES = trim · S = split · ⌫ = delete · ⌘C/⌘V = copy/paste at playhead · ⌘D = duplicate after · space = play/pause · ⏮/0 = start · ←/→ = ±5 s (⇧ = ±1 s) · ⌘Z/⌘⇧Z = undo/redo · click = seek · M = mute track · ＋/− or ⌘-scroll = zoom · save → Claude renders real mix</div>
+
+<script>
+let PX = 22;
+const LANE_H = 64;
+let DATA, ctx, master, instBuf, buffers = {}, muted = {}, nTracks = 0;
+let playing = false, startCtx = 0, startPos = 0, pos = 0, sources = [];
+let trackGains = {};   // t -> GainNode (live)
+const tGainDb = t => (DATA.track_gains || {})[t] || 0;
+function updateMasterTrim() {
+  // headroom must follow the sliders: trim down by the hottest positive track gain
+  const maxG = Math.max(0, ...Array.from({length: nTracks}, (_, t) => tGainDb(t)));
+  if (master) master.gain.value = 0.32 / Math.pow(10, maxG / 20);
+}
+function trackGainNode(t) {
+  if (!trackGains[t]) {
+    trackGains[t] = ctx.createGain();
+    trackGains[t].gain.value = Math.pow(10, tGainDb(t) / 20);
+    trackGains[t].connect(master);
+  }
+  return trackGains[t];
+}
+
+const $ = id => document.getElementById(id);
+// media registry: every stem is audio (WebAudio buffer), video (blob-URL <video>) or image
+const MEDIA = {};   // key -> {kind, duration, url?, el?}
+const VID_EXT = /\.(mp4|mov|webm)$/i, IMG_EXT = /\.(png|jpe?g|gif)$/i;
+const kindOf = path => VID_EXT.test(path) ? "video" : IMG_EXT.test(path) ? "image" : "audio";
+const mkind = stem => (MEDIA[stem] || {}).kind || "audio";
+const mdur = stem => mkind(stem) === "audio" ? buffers[stem].duration
+                   : mkind(stem) === "image" ? 3600 : MEDIA[stem].duration;
+const ts = c => c.trim_start || 0;
+const te = c => c.trim_end !== undefined ? c.trim_end
+              : mkind(c.stem) === "image" ? ts(c) + 5 : mdur(c.stem);
+const clen = c => Math.max(0.05, te(c) - ts(c));
+let selection = new Set(), clipboard = null, selTrack = 0;
+const isSel = c => selection.has(c);
+const selOnly = c => { selection.clear(); if (c) selection.add(c); };
+
+// ---------- undo/redo ----------
+let hist = [], hi = -1;
+function snap() { hist = hist.slice(0, hi + 1); hist.push(JSON.stringify(DATA.clips)); hi = hist.length - 1; }
+function restore(i) {
+  if (i < 0 || i >= hist.length) return;
+  hi = i; DATA.clips = JSON.parse(hist[hi]);
+  nTracks = Math.max(nTracks, Math.max(...DATA.clips.map(c => c.track)) + 1);
+  render();
+  if (playing) restartAt(curTime());
+  $("status").textContent = `history ${hi + 1}/${hist.length}`;
+}
+const undo = () => restore(hi - 1), redo = () => restore(hi + 1);
+
+async function init() {
+  DATA = await (await fetch("timeline.json?" + Date.now())).json();
+  // migrate: clips without .track get one lane per stem (preserves old layout)
+  if (DATA.clips.some(c => c.track === undefined)) {
+    const order = [...new Set(DATA.clips.map(c => c.stem))];
+    DATA.clips.forEach(c => { if (c.track === undefined) c.track = order.indexOf(c.stem); });
+  }
+  nTracks = Math.max(DATA.n_tracks || 0, Math.max(...DATA.clips.map(c => c.track)) + 1);
+  (DATA.muted_tracks || []).forEach(k => muted[k] = true);
+  // migrate: instrumental becomes an ordinary clip (movable/trimmable)
+  if (DATA.instrumental && !DATA.stems.INSTRUMENTAL) {
+    DATA.stems.INSTRUMENTAL = DATA.instrumental;
+    DATA.clips.push({ stem: "INSTRUMENTAL", start: 0, track: nTracks, gain_db: 0 });
+    nTracks++; DATA.n_tracks = nTracks;
+  }
+
+  ctx = new (window.AudioContext || window.webkitAudioContext)();
+  // master bus: trim + safety compressor so the summed preview never hard-clips
+  master = ctx.createGain(); master.gain.value = 0.32;
+  const safety = ctx.createDynamicsCompressor();
+  safety.threshold.value = -6; safety.ratio.value = 12;
+  safety.attack.value = 0.003; safety.release.value = 0.25;
+  master.connect(safety); safety.connect(ctx.destination);
+
+  instBuf = DATA.instrumental ? await loadBuf(DATA.instrumental) : { duration: 0 };
+  for (const n of Object.keys(DATA.stems)) {
+    await loadMedia(n, DATA.stems[n]);
+    $("status").textContent = "loaded " + n;
+  }
+  $("status").textContent = "ready";
+  updateMasterTrim();
+  snap();
+  render();
+}
+async function loadBuf(p) {
+  const r = await fetch(encodeURI(p));
+  return await ctx.decodeAudioData(await r.arrayBuffer());
+}
+async function loadMedia(key, path, bytes) {
+  const kind = kindOf(path);
+  if (kind === "audio") {
+    buffers[key] = bytes ? await ctx.decodeAudioData(bytes.slice(0)) : await loadBuf(path);
+    MEDIA[key] = { kind, duration: buffers[key].duration };
+    return;
+  }
+  // video/image via blob URL (whole-file fetch: no server Range support needed)
+  const blob = bytes ? new Blob([bytes]) : await (await fetch(encodeURI(path))).blob();
+  const url = URL.createObjectURL(blob);
+  if (kind === "image") {
+    const el = new Image();
+    await new Promise((ok, bad) => { el.onload = ok; el.onerror = bad; el.src = url; });
+    MEDIA[key] = { kind, duration: 3600, url, el };
+    return;
+  }
+  const el = document.createElement("video");
+  el.muted = true; el.playsInline = true; el.preload = "auto"; el.src = url;
+  await new Promise((ok, bad) => { el.onloadedmetadata = ok; el.onerror = bad; });
+  MEDIA[key] = { kind, duration: el.duration, url, el, poster: await grabPoster(el) };
+}
+async function grabPoster(vid) {
+  try {
+    vid.currentTime = vid.duration * 0.25;
+    await new Promise((ok, bad) => { vid.onseeked = ok; vid.onerror = bad;
+                                     setTimeout(ok, 1500); });
+    const c = document.createElement("canvas");
+    c.width = 100; c.height = 56;
+    c.getContext("2d").drawImage(vid, 0, 0, c.width, c.height);
+    return c;
+  } catch (e) { return null; }
+}
+
+// ---------- waveforms ----------
+function drawWave(canvas, buf, color, bg, t0, t1) {
+  const W = canvas.width, H = canvas.height, c = canvas.getContext("2d");
+  c.fillStyle = bg; c.fillRect(0, 0, W, H);
+  c.fillStyle = color;
+  const sr = buf.sampleRate, full = buf.getChannelData(0);
+  const a = Math.floor((t0 || 0) * sr), b = Math.floor((t1 === undefined ? buf.duration : t1) * sr);
+  const d = full.subarray(a, Math.max(a + 1, b)), spp = Math.max(1, Math.floor(d.length / W));
+  for (let x = 0; x < W; x++) {
+    let mn = 1, mx = -1;
+    const o = x * spp, step = Math.max(1, Math.floor(spp / 24));
+    for (let i = 0; i < spp; i += step) { const v = d[o + i]; if (v < mn) mn = v; if (v > mx) mx = v; }
+    const y1 = (1 - mx) * H / 2, y2 = (1 - mn) * H / 2;
+    c.fillRect(x, y1, 1, Math.max(1, y2 - y1));
+  }
+}
+const COLORS = { INSTRUMENTAL:["#2b3a4d","#7aa7d9"], v1:["#26415e","#7db2f0"], v2:["#26415e","#7db2f0"],
+  pre:["#3d2e5e","#b39df0"], chorus:["#5e3226","#f0967d"], chant:["#265e46","#7df0bb"],
+  body:["#265e5a","#7de8f0"], part3:["#1e4d3a","#5fd9a3"], bridge7:["#5e5226","#f0dc7d"],
+  bridge6:["#4d451e","#d9c45f"], every:["#5e2644","#f07dae"], noshape:["#5e2653","#f07dd4"],
+  last:["#6e2660","#ff7de8"], ghost:["#333","#999"],
+  hook_med:["#5e5226","#f0dc7d"], hook_full:["#5e5226","#f0dc7d"], comeon:["#4d451e","#d9c45f"] };
+// stems not in COLORS get a stable color from the palette (hash of name)
+const PALETTE = [["#4d2b2b","#e08585"],["#2b4d3a","#7fe0a8"],["#2b3a4d","#85b5e0"],
+  ["#4d452b","#e0d285"],["#3f2b4d","#c095e0"],["#2b4a4d","#85dce0"],
+  ["#4d2b40","#e085c0"],["#374d2b","#a8e085"]];
+function colorFor(stem) {
+  if (COLORS[stem]) return COLORS[stem];
+  let h = 0;
+  for (const ch of stem) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return PALETTE[h % PALETTE.length];
+}
+
+// ---------- layout: INSTRUMENTAL row 0, generic tracks below; clips float over rows ----------
+function render() {
+  const dur = Math.max(instBuf.duration,
+    ...DATA.clips.map(c => c.start + clen(c))) + 2;
+  const W = Math.ceil(dur * PX);
+  $("inner").style.width = W + "px";
+
+  const ruler = $("ruler");
+  ruler.innerHTML = ""; ruler.style.width = W + "px";
+  const step = PX > 250 ? 0.1 : PX > 120 ? 0.5 : PX > 40 ? 1 : PX > 12 ? 5 : 10;
+  for (let s = 0; s <= dur; s += step) {
+    const t = document.createElement("div");
+    t.className = "tick"; t.style.left = s * PX + "px";
+    const whole = Math.abs(s - Math.round(s)) < 1e-6;
+    t.textContent = whole
+      ? `${Math.floor(s/60)}:${String(Math.round(s)%60).padStart(2,"0")}`
+      : (step <= 0.1 ? s.toFixed(1) : "");
+    if (!whole) t.style.color = "#444";
+    ruler.appendChild(t);
+  }
+
+  // left column: instrumental + numbered tracks + add button
+  const names = $("namesinner");
+  names.innerHTML = "";
+  const mkName = (label, key, sub) => {
+    const nm = document.createElement("div");
+    nm.className = "tname" + (key === selTrack ? " active" : "");
+    if (typeof key === "number")
+      nm.onclick = () => { selTrack = key; render(); $("status").textContent = "Track " + (key + 1) + " armed"; };
+    nm.innerHTML = `<span>${label}</span>` + (sub ? `<span class="path">${sub}</span>` : "");
+    const mb = document.createElement("button");
+    mb.textContent = "M"; mb.className = muted[key] ? "on" : "";
+    mb.onclick = () => { muted[key] = !muted[key]; mb.className = muted[key] ? "on" : "";
+                         if (playing) restartAt(curTime()); };
+    nm.appendChild(mb);
+    names.appendChild(nm);
+  };
+  for (let t = 0; t < nTracks; t++) {
+    mkName("Track " + (t + 1), t, "");
+    const row = names.lastChild;
+    const db = document.createElement("button");
+    db.textContent = "×"; db.title = "delete track";
+    db.style.cssText = "position:absolute;right:4px;top:4px;width:20px;padding:1px 4px;font-size:.6rem";
+    db.onclick = ev => { ev.stopPropagation(); deleteTrack(t); };
+    row.style.position = "relative";
+    row.appendChild(db);
+    const ub = document.createElement("button");
+    ub.textContent = "↑"; ub.title = "move track up";
+    ub.style.cssText = "position:absolute;right:4px;top:26px;width:20px;padding:1px 4px;font-size:.6rem";
+    ub.onclick = ev => { ev.stopPropagation(); moveTrack(t, -1); };
+    row.appendChild(ub);
+    const wb = document.createElement("button");
+    wb.textContent = "↓"; wb.title = "move track down";
+    wb.style.cssText = "position:absolute;right:26px;top:26px;width:20px;padding:1px 4px;font-size:.6rem";
+    wb.onclick = ev => { ev.stopPropagation(); moveTrack(t, +1); };
+    row.appendChild(wb);
+    const gl = document.createElement("span");
+    gl.textContent = (tGainDb(t) > 0 ? "+" : "") + tGainDb(t) + " dB";
+    gl.style.cssText = "position:absolute;left:6px;bottom:2px;font-size:.55rem;color:#8ab4ff";
+    row.appendChild(gl);
+    const sl = document.createElement("input");
+    sl.type = "range"; sl.min = -12; sl.max = 12; sl.step = 0.5; sl.value = tGainDb(t);
+    sl.style.cssText = "position:absolute;left:40px;bottom:0;width:52px;height:12px";
+    sl.onclick = ev => ev.stopPropagation();
+    sl.oninput = ev => {
+      ev.stopPropagation();
+      DATA.track_gains = DATA.track_gains || {};
+      DATA.track_gains[t] = +sl.value;
+      gl.textContent = (+sl.value > 0 ? "+" : "") + sl.value + " dB";
+      if (trackGains[t]) trackGains[t].gain.value = Math.pow(10, +sl.value / 20);
+      updateMasterTrim();
+    };
+    row.appendChild(sl);
+  }
+
+
+  // lane backgrounds (row 0 = instrumental)
+  const lanes = $("lanes");
+  lanes.innerHTML = ""; lanes.style.width = W + "px";
+  for (let t = 0; t < nTracks; t++) {
+    const lane = document.createElement("div");
+    lane.className = "lane" + (t === selTrack ? " active" : "");
+    lanes.appendChild(lane);
+  }
+  lanes.onmousedown = e => {
+    if (!e.target.classList || !e.target.classList.contains("lane")) return;
+    const li = [...lanes.children].indexOf(e.target);
+    if (li >= 0 && li < nTracks) { selTrack = li;
+      [...$("namesinner").children].forEach((n, i) => n.classList && n.classList.toggle("active", i === li));
+      [...lanes.children].forEach((l, i) => l.classList && l.classList.toggle("active", i === li)); }
+    const r = $("lanes").getBoundingClientRect();
+    const mx0 = e.clientX - r.left, my0 = e.clientY - r.top;
+    const mq = $("marquee");
+    let moved = false;
+    const move = ev => {
+      const mx = ev.clientX - r.left, my = ev.clientY - r.top;
+      if (Math.abs(mx - mx0) + Math.abs(my - my0) > 6) moved = true;
+      if (!moved) return;
+      mq.style.display = "block";
+      mq.style.left = Math.min(mx0, mx) + "px";
+      mq.style.top = 26 + Math.min(my0, my) + "px";
+      mq.style.width = Math.abs(mx - mx0) + "px";
+      mq.style.height = Math.abs(my - my0) + "px";
+    };
+    const up = ev => {
+      window.removeEventListener("mousemove", move); window.removeEventListener("mouseup", up);
+      mq.style.display = "none";
+      if (!moved) { seek(xToTime(e)); return; }
+      const mx = ev.clientX - r.left, my = ev.clientY - r.top;
+      const tA = Math.min(mx0, mx) / PX, tB = Math.max(mx0, mx) / PX;
+      const rA = Math.floor(Math.min(my0, my) / LANE_H), rB = Math.floor(Math.max(my0, my) / LANE_H);
+      if (!ev.shiftKey) selection.clear();
+      DATA.clips.forEach(c => {
+        if (c.track >= rA && c.track <= rB && c.start < tB && c.start + clen(c) > tA)
+          selection.add(c);
+      });
+      render();
+      $("status").textContent = selection.size + " selected";
+    };
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", up);
+  };
+
+  // movable clips
+  DATA.clips.forEach(c => {
+    const w = Math.max(14, clen(c) * PX);
+    const el = document.createElement("div");
+    el.className = "clip" + (isSel(c) ? " sel" : "");
+    el.style.left = c.start * PX + "px";
+    el.style.top = c.track * LANE_H + 4 + "px";
+    el.style.width = w + "px";
+    const cv = document.createElement("canvas");
+    cv.width = Math.min(Math.ceil(w), 12000); cv.height = 56;
+    const kind = mkind(c.stem);
+    if (kind === "audio") {
+      const [bg, fg] = colorFor(c.stem);
+      drawWave(cv, buffers[c.stem], fg, bg, ts(c), te(c));
+    } else {
+      const g2 = cv.getContext("2d");
+      g2.fillStyle = kind === "video" ? "#1a2b1e" : "#2b241a";
+      g2.fillRect(0, 0, cv.width, cv.height);
+      const tile = kind === "video" ? MEDIA[c.stem].poster : MEDIA[c.stem].el;
+      if (tile) for (let x = 0; x < cv.width; x += 102)
+        g2.drawImage(tile, x, 0, 100, 56);
+      g2.strokeStyle = kind === "video" ? "#5fd97d" : "#d9b45f";
+      g2.strokeRect(0.5, 0.5, cv.width - 1, cv.height - 1);
+    }
+    el.appendChild(cv);
+    const lb = document.createElement("span"); lb.className = "lbl";
+    lb.textContent = DATA.stems[c.stem].split("/").pop() + " · " + c.start.toFixed(2);
+    el.title = DATA.stems[c.stem];
+    el.appendChild(lb);
+    for (const side of ["l", "r"]) {
+      const h = document.createElement("div");
+      h.className = "handle " + side;
+      h.addEventListener("mousedown", e => trimDrag(e, el, c, side));
+      el.appendChild(h);
+    }
+    dragClip(el, c, lb);
+    lanes.appendChild(el);
+  });
+}
+function xToTime(e) {
+  const r = $("lanes").getBoundingClientRect();
+  return Math.max(0, (e.clientX - r.left) / PX);
+}
+
+function trimDrag(e, el, clip, side) {
+  e.preventDefault(); e.stopPropagation();
+  selOnly(clip); render();
+  el = [...$("lanes").children].find(x => x.classList && x.classList.contains("sel")) || el;
+  const x0 = e.clientX, s0 = clip.start, a0 = ts(clip), b0 = te(clip);
+  const move = ev => {
+    const d = (ev.clientX - x0) / PX;
+    if (side === "l") {
+      const na = Math.min(b0 - 0.05, Math.max(0, a0 + d));
+      clip.trim_start = Math.round(na * 100) / 100;
+      clip.start = Math.round((s0 + (clip.trim_start - a0)) * 100) / 100;
+    } else {
+      clip.trim_end = Math.round(Math.min(mdur(clip.stem),
+                       Math.max(a0 + 0.05, b0 + d)) * 100) / 100;
+    }
+    render();
+  };
+  const up = () => { window.removeEventListener("mousemove", move);
+    window.removeEventListener("mouseup", up); snap();
+    if (playing) restartAt(curTime()); };
+  window.addEventListener("mousemove", move);
+  window.addEventListener("mouseup", up);
+}
+
+function moveTrack(t, d) {
+  const o = t + d;
+  if (o < 0 || o >= nTracks) return;
+  DATA.clips.forEach(c => { c.track = c.track === t ? o : c.track === o ? t : c.track; });
+  const mt = muted[t], mo = muted[o];
+  muted[t] = mo; muted[o] = mt;
+  snap(); render();
+  if (playing) restartAt(curTime());
+}
+
+function deleteTrack(t) {
+  const n = DATA.clips.filter(c => c.track === t).length;
+  if (n) { $("status").textContent = `Track ${t + 1} has ${n} clip(s) — move or delete them first`; return; }
+  if (nTracks <= 1) return;
+  DATA.clips.forEach(c => { if (c.track > t) c.track--; });
+  nTracks--; DATA.n_tracks = nTracks;
+  selTrack = Math.min(selTrack, nTracks - 1);
+  delete muted[t];  // mute flags shift; cheap reset for this row
+  snap(); render();
+  $("status").textContent = `Track ${t + 1} deleted`;
+}
+
+function dragClip(el, clip, lbl) {
+  el.addEventListener("mousedown", e => {
+    e.preventDefault(); e.stopPropagation();
+    if (e.shiftKey) { selection.has(clip) ? selection.delete(clip) : selection.add(clip); render(); return; }
+    if (!selection.has(clip)) selOnly(clip);
+    render();
+    const group = [...selection].map(c => ({ c, s0: c.start, t0: c.track }));
+    const x0 = e.clientX, y0 = e.clientY, s0 = clip.start, t0 = clip.track;
+    let moved = false;
+    const move = ev => {
+      moved = true;
+      const dt = Math.round(((ev.clientX - x0) / PX) / 0.05) * 0.05;
+      const dtr = Math.round((ev.clientY - y0) / LANE_H);
+      for (const g of group) {
+        g.c.start = Math.max(0, Math.round((g.s0 + dt) * 100) / 100);
+        g.c.track = Math.min(nTracks - 1, Math.max(0, g.t0 + dtr));
+      }
+      render();
+    };
+    const up = () => {
+      window.removeEventListener("mousemove", move); window.removeEventListener("mouseup", up);
+      if (moved) { snap(); if (playing) restartAt(curTime()); }
+    };
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", up);
+  });
+}
+
+// ---------- transport ----------
+function curTime() { return playing ? ctx.currentTime - startCtx + startPos : pos; }
+function schedule(from) {
+  const t0 = ctx.currentTime + 0.08;
+  for (const c of DATA.clips) {
+    if (muted[c.track] || mkind(c.stem) !== "audio") continue;
+    const buf = buffers[c.stem];
+    if (c.start + clen(c) <= from) continue;
+    const s = ctx.createBufferSource(); s.buffer = buf;
+    const g = ctx.createGain();
+    g.gain.value = (c.stem === "INSTRUMENTAL" ? 1 : DATA.vocal_anchor) * Math.pow(10, (c.gain_db || 0) / 20);
+    s.connect(g); g.connect(trackGainNode(c.track));
+    if (c.start >= from) s.start(t0 + c.start - from, ts(c), clen(c));
+    else s.start(t0, ts(c) + (from - c.start), clen(c) - (from - c.start));
+    sources.push(s);
+  }
+  startCtx = t0; startPos = from;
+}
+function stopAll() { sources.forEach(s => { try { s.stop(); } catch(e){} }); sources = []; }
+function toggle() {
+  if (playing) { pos = curTime(); stopAll(); playing = false; $("play").textContent = "▶"; return; }
+  ctx.resume(); schedule(pos); playing = true; $("play").textContent = "⏸";
+}
+function seek(t) { pos = t; if (playing) restartAt(t); }
+function restartAt(t) { stopAll(); pos = t; schedule(t); }
+
+// ---------- controls ----------
+$("play").onclick = toggle;
+$("addtrk").onclick = () => { nTracks++; DATA.n_tracks = nTracks; render();
+  $("scroll").scrollTop = 1e9; };
+$("tostart").onclick = () => seek(0);
+$("undo").onclick = undo;
+$("redo").onclick = redo;
+$("zin").onclick = () => zoom(PX * 1.4);
+$("zout").onclick = () => zoom(PX / 1.4);
+function zoom(nv) { const t = curTime(); PX = Math.min(400, Math.max(4, nv)); render();
+  $("scroll").scrollLeft = t * PX - $("scroll").clientWidth / 2; }
+$("scroll").addEventListener("wheel", e => {
+  if (e.metaKey || e.ctrlKey) { e.preventDefault(); zoom(PX * (e.deltaY < 0 ? 1.15 : 0.87)); }
+}, { passive: false });
+document.addEventListener("keydown", e => {
+  if ((e.metaKey || e.ctrlKey) && e.code === "KeyZ") {
+    e.preventDefault(); e.shiftKey ? redo() : undo(); return;
+  }
+  if ((e.metaKey || e.ctrlKey) && e.code === "KeyC" && selection.size) {
+    e.preventDefault(); clipboard = [...selection].map(c => JSON.parse(JSON.stringify(c)));
+    $("status").textContent = "copied " + clipboard.length + " clip(s)"; return;
+  }
+  if ((e.metaKey || e.ctrlKey) && e.code === "KeyV" && clipboard && clipboard.length) {
+    e.preventDefault();
+    const base = Math.min(...clipboard.map(c => c.start));
+    const baseTrack = Math.min(...clipboard.map(c => c.track));
+    const at = curTime();
+    selection.clear();
+    for (const src of clipboard) {
+      const c = JSON.parse(JSON.stringify(src));
+      c.start = Math.round((at + (src.start - base)) * 100) / 100;
+      c.track = Math.min(nTracks - 1, selTrack + (src.track - baseTrack));
+      DATA.clips.push(c); selection.add(c);
+    }
+    snap(); render(); if (playing) restartAt(curTime()); return;
+  }
+  if ((e.metaKey || e.ctrlKey) && e.code === "KeyD" && selection.size) {
+    e.preventDefault();
+    const group = [...selection];
+    const span = Math.max(...group.map(c => c.start + clen(c))) - Math.min(...group.map(c => c.start));
+    selection.clear();
+    for (const src of group) {
+      const c = JSON.parse(JSON.stringify(src));
+      c.start = Math.round((src.start + span) * 100) / 100;
+      DATA.clips.push(c); selection.add(c);
+    }
+    snap(); render(); if (playing) restartAt(curTime()); return;
+  }
+  if (e.code === "Escape") { selection.clear(); render(); return; }
+  if (e.code === "Space") { e.preventDefault(); toggle(); }
+  const fine = e.shiftKey ? 1 : 5;
+  if (e.code === "ArrowRight") seek(Math.min(instBuf.duration, curTime() + fine));
+  if (e.code === "ArrowLeft") seek(Math.max(0, curTime() - fine));
+  if (e.code === "Home" || e.code === "Digit0") seek(0);
+  if (e.code === "KeyS" && selection.size) {
+    const t = curTime();
+    let did = false;
+    for (const c of [...selection]) {
+      if (t > c.start + 0.05 && t < c.start + clen(c) - 0.05) {
+        const cut = ts(c) + (t - c.start);
+        const right = { stem: c.stem, start: Math.round(t * 100) / 100, track: c.track,
+                        gain_db: c.gain_db || 0, trim_start: Math.round(cut * 100) / 100,
+                        trim_end: te(c) };
+        c.trim_end = Math.round(cut * 100) / 100;
+        DATA.clips.push(right); did = true;
+      }
+    }
+    if (did) { snap(); render(); if (playing) restartAt(curTime()); }
+  }
+  if ((e.code === "Backspace" || e.code === "Delete") && selection.size) {
+    DATA.clips = DATA.clips.filter(c => !selection.has(c));
+    selection.clear(); snap(); render();
+    if (playing) restartAt(curTime());
+  }
+});
+$("ruler").addEventListener("mousedown", e => seek(xToTime(e)));
+$("reload").onclick = () => location.reload();
+$("save").onclick = async () => {
+  DATA.n_tracks = nTracks;
+  DATA.muted_tracks = Object.keys(muted).filter(k => muted[k]).map(k => isNaN(+k) ? k : +k);
+  const r = await fetch("timeline.json", { method: "PUT", body: JSON.stringify(DATA, null, 1) });
+  $("status").textContent = r.ok ? "saved ✓" : "save FAILED — serve.py running?";
+};
+
+$("scroll").addEventListener("scroll", () =>
+  $("namesinner").style.transform = `translateY(${-$("scroll").scrollTop}px)`);
+
+// ---------- video monitor: shows the topmost visual clip under the playhead ----------
+let monKey = null;
+function syncMonitor(t) {
+  let hit = null;
+  for (const c of DATA.clips) {
+    if (muted[c.track] || mkind(c.stem) === "audio") continue;
+    if (t >= c.start && t < c.start + clen(c) && (!hit || c.track < hit.track)) hit = c;
+  }
+  const mon = $("monitor"), mv = $("monvid"), mi = $("monimg");
+  if (!hit) { mon.style.display = "none"; if (!mv.paused) mv.pause(); monKey = null; return; }
+  mon.style.display = "block";
+  const m = MEDIA[hit.stem];
+  $("monhead").textContent = DATA.stems[hit.stem].split("/").pop();
+  if (m.kind === "image") {
+    mv.style.display = "none"; if (!mv.paused) mv.pause();
+    mi.style.display = "block"; if (mi.src !== m.url) mi.src = m.url;
+    monKey = hit.stem; return;
+  }
+  mi.style.display = "none"; mv.style.display = "block";
+  if (monKey !== hit.stem) { mv.src = m.url; monKey = hit.stem; }
+  const want = ts(hit) + (t - hit.start);
+  if (Math.abs(mv.currentTime - want) > 0.15) mv.currentTime = want;
+  if (playing && mv.paused) mv.play().catch(() => {});
+  if (!playing && !mv.paused) mv.pause();
+}
+
+setInterval(() => {
+  const t = curTime();
+  $("time").textContent = `${Math.floor(t/60)}:${(t%60).toFixed(1).padStart(4,"0")}`;
+  $("playhead").style.left = t * PX + "px";
+  syncMonitor(t);
+  if (playing) {
+    const sc = $("scroll"), x = t * PX;
+    if (x < sc.scrollLeft || x > sc.scrollLeft + sc.clientWidth - 60)
+      sc.scrollLeft = x - 100;
+  }
+}, 80);
+
+// ---------- import (button + drag & drop) ----------
+async function importFiles(files, atT, atTrack) {
+  for (const f of files) {
+    $("status").textContent = "importing " + f.name + "…";
+    try {
+      const bytes = await f.arrayBuffer();
+      const resp = await fetch("/upload?name=" + encodeURIComponent(f.name), { method: "POST", body: bytes });
+      if (!resp.ok) { $("status").textContent = "import FAILED: " + f.name; continue; }
+      const path = await resp.text();
+      let key = f.name.replace(/\.[^.]+$/, "");
+      while (DATA.stems[key] && DATA.stems[key] !== path) key += "_2";
+      DATA.stems[key] = path;
+      await loadMedia(key, path, bytes);
+      const c = { stem: key, start: Math.round(atT * 100) / 100, track: atTrack, gain_db: 0 };
+      if (MEDIA[key].kind === "image") c.trim_end = 5;   // stills default to 5 s
+      DATA.clips.push(c);
+      selOnly(c);
+      atT += (MEDIA[key].kind === "image" ? 5 : MEDIA[key].duration) + 0.5;
+    } catch (err) {
+      $("status").textContent = "import ERROR: " + f.name + " — " + err.message;
+      return;
+    }
+  }
+  snap(); render();
+  $("status").textContent = "imported ✓ (remember: save)";
+}
+
+$("import").onclick = () => $("filein").click();
+$("filein").onchange = e => {
+  if (e.target.files.length) importFiles([...e.target.files], curTime(), selTrack);
+  e.target.value = "";
+};
+
+// document-level so a miss never navigates the tab to the file
+document.addEventListener("dragover", e => { e.preventDefault(); $("scroll").style.outline = "2px dashed #8ab4ff"; });
+document.addEventListener("dragleave", () => $("scroll").style.outline = "");
+document.addEventListener("drop", e => {
+  e.preventDefault(); $("scroll").style.outline = "";
+  if (!e.dataTransfer.files.length) return;
+  const r = $("lanes").getBoundingClientRect();
+  const t = Math.max(0, (e.clientX - r.left) / PX);
+  const track = Math.min(nTracks - 1, Math.max(0, Math.floor((e.clientY - r.top) / LANE_H)));
+  importFiles([...e.dataTransfer.files], t, track);
+});
+
+init();
+</script>
+</body>
+</html>

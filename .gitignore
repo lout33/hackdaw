@@ -1,0 +1,13 @@
+# personal project data — never published
+shape_of_ai/
+
+.venv/
+.obsidian/
+__pycache__/
+.DS_Store
+
+# render outputs + imported media (regenerable / user data)
+*.wav
+!demo_project/tone.wav
+final_video.mp4
+imported/

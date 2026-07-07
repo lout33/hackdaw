@@ -1,0 +1,16 @@
+{
+ "vocal_anchor": 1.0,
+ "n_tracks": 3,
+ "stems": {
+  "clip_a": "clip_a.mp4",
+  "still": "still.png",
+  "tone": "tone.wav"
+ },
+ "clips": [
+  { "stem": "clip_a", "start": 0, "track": 1, "gain_db": 0 },
+  { "stem": "still", "start": 3, "track": 0, "gain_db": 0, "trim_end": 2 },
+  { "stem": "tone", "start": 0, "track": 2, "gain_db": 0 }
+ ],
+ "track_gains": {},
+ "muted_tracks": []
+}
